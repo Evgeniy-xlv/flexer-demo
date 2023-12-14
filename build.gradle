@@ -1,0 +1,87 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        mavenLocal()
+    }
+    dependencies {
+        classpath 'c0rnell.flexer:flexer-core:1.0.28'
+    }
+}
+
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '2.7.3'
+    id 'io.spring.dependency-management' version '1.1.3'
+}
+
+group = 'c0rnell.flexer.demo'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '17'
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    implementation 'c0rnell.flexer:flexer-core:1.0.28'
+    implementation 'c0rnell.flexer:flexer-agent:1.0.0'
+
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.flywaydb:flyway-core'
+
+    runtimeOnly 'org.postgresql:postgresql'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+bootJar {
+    from {
+        configurations.runtimeClasspath
+                .findAll { it.name.matches('^((flexer-agent)(.*)*)\\.jar$') }
+                .collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    doFirst {
+        var flexer = configurations.runtimeClasspath.find { it.name.matches('^(flexer-agent(.*)*)\\.jar$') }
+        var flexerMan = new java.util.jar.Manifest(new FileInputStream(resources.text.fromArchiveEntry(flexer, "META-INF/MANIFEST.MF").asFile()))
+        var map = new HashMap()
+        flexerMan.getMainAttributes().each {
+            map.put(it.getKey().toString(), it.getValue())
+        }
+        manifest.attributes(map)
+    }
+
+    exclude '**/flexer-agent*.jar'
+}
+
+compileJava {
+    // flexer + lombok setup
+    doFirst {
+        def annlib = buildscript.configurations.classpath
+                .findAll { it.name.matches('^((flexer-core)(.*)*)\\.jar$') }
+                .first()
+        def lombok = configurations.compileClasspath
+                .findAll { it.name.matches('^((lombok)(.*)*)\\.jar$') }
+                .first()
+        System.setProperty('shadow.override.lombok', "$annlib;$lombok")
+    }
+    doLast {
+        System.clearProperty('shadow.override.lombok')
+    }
+}
